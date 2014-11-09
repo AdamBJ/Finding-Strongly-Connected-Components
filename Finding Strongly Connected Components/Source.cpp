@@ -2,48 +2,56 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-//#include "QuickSort.cpp"
+#include "QuickSort.h"
 
 using namespace std;
 
 bool ReadFile(vector<int> graph[], vector<int> reversedGraph[], string fileName);
-void DFSLoop_rGraph(vector<int> rGraph, int* orderingArray);
+void DFSLoop_rGraph(vector<int> rGraph[], vector<int>& orderingVector, const int NO_VERTS);
+void DFS_rGraph(vector<int> rGraph[], vector<int>& orderingVector, int startVertex);
+void FindSCC(vector<int> graph[], vector<int> magicOrdering, vector<int>& SCC_sizes, const int NUM_VERTS);
+void DFS_graph(vector<int> graph[], int startVertex, int& SCC_size);
 
 int main(){
-	
-	vector<int> test(10);
 	const int NUM_VERTS = 875714;
 	//create graph and reversedGraph from .txt file
 	
 	//create the arrays on the heap. Too big for the stack.
-	vector<int>* graph = new vector<int>[NUM_VERTS + 1]();//+1 because we want graph[1] to store data for the vector labelled '1'.
+	vector<int>* graph = new vector<int>[NUM_VERTS + 1];//+1 because we want graph[1] to store data for the vector labelled '1'.
 	vector<int>* reversedGraph = new vector<int>[NUM_VERTS + 1];
 
-	//for (int i = 1; i < NUM_VERTS + 1; i++){
-	//	reversedGraph[i].push_back(0);
-	//	graph[i].push_back(0);
-	//}
+	for (int i = 1; i < NUM_VERTS + 1; i++){
+		graph[i].reserve(10);
+		reversedGraph[i].reserve(10);
+		graph[i].push_back(0);
+		reversedGraph[i].push_back(0);
+	}
 
 	bool success = ReadFile(graph, reversedGraph, "SCC.txt");
 	if (!success) return 0;
-	std::vector<int> *t = &graph[0];
-	std::vector<int> *p = &reversedGraph[0];
 
 	//run DFSLoop_rGraph on reversedGraph to create the "magic ordering" we will use to find the SCCs.
 
-	int* magicOrdering = new int[NUM_VERTS]; //magicOrdering[0] is the first vertex we target when we run FindSCCs.
-	//DFSLoop_rGraph(reversedGraph, magicOrdering);
+	vector<int> magicOrdering; //magicOrdering[0] is the first vertex we target when we run FindSCCs.
+	DFSLoop_rGraph(reversedGraph, magicOrdering, NUM_VERTS);//create the magic ordering. Pass magicOrdering in by reference.
 
 	//run FindSCCs on the normal graph. Return a vector containing the SCC sizes.
-	//vector<int> SCC_sizes = FindSCC(graph, magicOrdering);
+	vector<int> SCC_sizes;
+	FindSCC(graph, magicOrdering, SCC_sizes, NUM_VERTS);
 
 	//sort the vector so we know what the 5 largest SCCs are. Print the sizes.
-	////int numSCC = SCC_sizes.size();
-	//QuickSort(SCC_sizes, 0, numSCC - 1);
-	//for (int i = numSCC - 1; i > numSCC - 6; i--){
-	//	cout << SCC_sizes[i] << " ";
-	//}
-	
+	int numSCC = SCC_sizes.size();
+	QuickSort(SCC_sizes, 0, numSCC - 1);
+	if (numSCC >= 5){
+		for (int i = numSCC - 1; i > numSCC - 6; i--){
+			cout << SCC_sizes[i] << " ";
+		}
+	}
+	else {
+		for (int i = numSCC - 1; i >= 0; i--){
+			cout << SCC_sizes[i] << " ";
+		}
+	}
 	//we don't have to delete our graphs, once the program exits the memory will be freed. If we were running this program continously we'd have to be
 	//wary of memory leaks though.
 	return 0;
@@ -65,49 +73,55 @@ bool ReadFile(vector<int> graph[], vector<int> reversedGraph[], string fileName)
 	else {
 		int i, j;
 		while (adjList_txt >> i >> j){
-			--i; --j;
 			graph[i].push_back(j);
-			//reversedGraph[j].push_back(i);
+			reversedGraph[j].push_back(i);
 		}
-		//// Safely use the file stream
-		//std::string line;
-		//int vertex;
-		//int vertices[2];
-
-		//while (std::getline(adjList_txt, line))
-		//{
-		//	std::istringstream iss(line);
-		//	//we will parse out two ints, the head and tail vertices. First entry in line is the tail, ie 2 7: 2 = tail. Edge is 2 -> 7. Reverse edge for rGraph.
-		//	for (int i = 0; i < 2; i++){
-		//		iss >> vertex;
-		//		vertices[i] = vertex;
-		//	}
-
-		//	graph[vertices[0]].push_back(vertices[1]);//create edge in graph from tail to head: 2 7? 2->7
-		//	reversedGraph[vertices[1]].push_back(vertices[0]);//create edge in opposite direction for the r graph: 2 7? 7->2
-		//}
 		adjList_txt.close();
 		return true;
 	}
 }
 
-void DFSLoop_rGraph(vector<int> rGraph, int* orderingArray) {
-
-}
-/*
-for (int i = 1; i <= 20; i++){
-	cout << i << ": ";
-	for (int j = 0; j < graph[i].size(); j++){
-		cout << graph[i][j] << " ";
+/*Creates the magic ordering that will be used to peel-off SCC. Relies on the helper function DFS_rGraph to perform the DFSs that generate the ordering.*/
+void DFSLoop_rGraph(vector<int> rGraph[], vector<int>& orderingVector, const int NO_VERTS) {
+	for (int i = NO_VERTS; i > 0; i--){//for every vertex
+		if (rGraph[i][0] == 0){ //0 if not explored, 1 if explored
+			DFS_rGraph(rGraph, orderingVector, i);
+		}
 	}
-	cout << '\n';
 }
 
-for (int i = 1; i <= 20; i++){
-	cout << i << ": ";
-	for (int j = 0; j < reversedGraph[i].size(); j++){
-		cout << reversedGraph[i][j] << " ";
+void DFS_rGraph(vector<int> rGraph[], vector<int>& orderingVector, int startVertex){
+	rGraph[startVertex][0] = 1;//mark explored
+	int head;
+	for (int i = rGraph[startVertex].size()-1; i > 0; i--){
+		head = rGraph[startVertex][i];
+		if (rGraph[head][0] == 0){//if the head node of the edge currently under consideration hasn't been explored, DFS on it
+			DFS_rGraph(rGraph, orderingVector, head);
+		}
 	}
-	cout << '\n';
+	orderingVector.push_back(startVertex);
 }
-*/
+
+void FindSCC(vector<int> graph[], vector<int> magicOrdering, vector<int>& SCC_sizes, const int NUM_VERTS){
+	int SCC_size = 0;
+	for (int i = NUM_VERTS-1; i >= 0; i--){
+		int currVertex = magicOrdering[i];
+		if (graph[currVertex][0] == 0){
+			DFS_graph(graph, currVertex, SCC_size);
+			SCC_sizes.push_back(SCC_size);
+			SCC_size = 0;
+		}
+	}
+}
+
+void DFS_graph(vector<int> graph[], int startVertex, int& SCC_size){
+	graph[startVertex][0] = 1;//mark explored
+	SCC_size++;
+	int head;
+	for (int i = graph[startVertex].size() - 1; i > 0; i--){
+		head = graph[startVertex][i];
+		if (graph[head][0] == 0){//if the head node of the edge currently under consideration hasn't been explored, DFS on it
+			DFS_graph(graph, head, SCC_size);
+		}
+	}
+}
