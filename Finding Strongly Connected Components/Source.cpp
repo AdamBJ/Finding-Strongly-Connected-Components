@@ -21,7 +21,7 @@ int main(){
 	vector<int>* reversedGraph = new vector<int>[NUM_VERTS + 1];
 
 	for (int i = 1; i < NUM_VERTS + 1; i++){
-		graph[i].reserve(10);
+		graph[i].reserve(10);//saves about 20 seconds on the read-in time. Prevent vectors from having to resize themselves from 1->2,2->4,4->8...
 		reversedGraph[i].reserve(10);
 		graph[i].push_back(0);
 		reversedGraph[i].push_back(0);
